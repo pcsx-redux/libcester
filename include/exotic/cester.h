@@ -719,22 +719,26 @@ static __CESTER_INLINE__ void cester_str_value_after_first(char *arg, char from,
 }
 
 static __CESTER_INLINE__ void cester_concat_str(char **out, const char * extra) {
-    size_t i = 0, index = strlen(*out);
-    if (index == 0) {
-        (*out) = (char*) malloc(sizeof(char) * 80000 );
-    }
+    size_t index = strlen(*out), length;
+    char *grown;
     if (extra == NULL) {
         extra = "(null)";
     }
-    while (1) {
-        if (extra[i] == '\0') {
-            break;
-        }
-        (*out)[index] = extra[i];
-        ++index;
-        ++i;
+    length = strlen(extra);
+    if (length == 0) {
+        return;
     }
-    (*out)[index] = '\0';
+    grown = (char*) malloc(sizeof(char) * (index + length + 1));
+    if (grown == NULL) {
+        return;
+    }
+    memcpy(grown, *out, index);
+    memcpy(grown + index, extra, length + 1);
+    /* An empty string is the initial literal, anything longer came from here. */
+    if (index != 0) {
+        free(*out);
+    }
+    (*out) = grown;
 }
 
 /* For some wierd reasons sprintf clears old array first 
