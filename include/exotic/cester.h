@@ -61,6 +61,9 @@ extern "C" {
 #include <stdlib.h>
 #include <time.h>
 #include <stdio.h>
+#ifdef CESTER_REPORT_STREAM
+FILE* CESTER_REPORT_STREAM(void);
+#endif
 #include <string.h>
 #ifndef CESTER_NO_SIGNAL
 #include <signal.h>
@@ -1145,6 +1148,24 @@ static __CESTER_INLINE__ void write_testcase_tap_v13(TestCase *a_test_case, char
     }
 }
 
+static __CESTER_INLINE__ void cester_print_xml_escaped(const char* text) {
+    const char* entity;
+    for (; text && *text; ++text) {
+        switch (*text) {
+            case '&': entity = "&amp;"; break;
+            case '<': entity = "&lt;"; break;
+            case '>': entity = "&gt;"; break;
+            case '"': entity = "&quot;"; break;
+            default: entity = NULL; break;
+        }
+        if (entity) {
+            fprintf(superTestInstance.output_stream, "%s", entity);
+        } else {
+            fprintf(superTestInstance.output_stream, "%c", *text);
+        }
+    }
+}
+
 static __CESTER_INLINE__ void write_testcase_junitxml(TestCase *a_test_case, char* file_name) {
     CESTER_DELEGATE_FPRINT_STR((default_color), "    <testcase classname=\"");
     CESTER_DELEGATE_FPRINT_STR((default_color), file_name);
@@ -1180,19 +1201,19 @@ static __CESTER_INLINE__ void write_testcase_junitxml(TestCase *a_test_case, cha
             CESTER_DELEGATE_FPRINT_STR((default_color), "in '");
             CESTER_DELEGATE_FPRINT_STR((default_color), a_test_case->name);
             CESTER_DELEGATE_FPRINT_STR((default_color), "' \n");
-            CESTER_DELEGATE_FPRINT_STR((default_color), a_test_case->execution_output);
+            cester_print_xml_escaped(a_test_case->execution_output);
             CESTER_DELEGATE_FPRINT_STR((default_color), "        </failure>\n    </testcase>\n");
             break;
 #ifndef CESTER_NO_MEM_TEST
         case CESTER_RESULT_MEMORY_LEAK:
             CESTER_DELEGATE_FPRINT_STR((default_color), ">\n        <failure message=\"the test case leaks memory\" type=\"MemoryLeakError\">");
-            CESTER_DELEGATE_FPRINT_STR((default_color), a_test_case->execution_output);
+            cester_print_xml_escaped(a_test_case->execution_output);
             CESTER_DELEGATE_FPRINT_STR((default_color), "        </failure>\n    </testcase>\n");
             break;
 #endif
         default:
             CESTER_DELEGATE_FPRINT_STR((default_color), ">\n        <failure message=\"the test case failed\" type=\"TestFailed\">");
-            CESTER_DELEGATE_FPRINT_STR((default_color), a_test_case->execution_output);
+            cester_print_xml_escaped(a_test_case->execution_output);
             CESTER_DELEGATE_FPRINT_STR((default_color), "        </failure>\n    </testcase>\n");
             break;
     }
@@ -3556,6 +3577,19 @@ static __CESTER_INLINE__ unsigned cester_run_all_test(unsigned argc, char **argv
             cester_concat_str(&superTestInstance.flattened_cmd_argv, " ");
         }
     }
+
+#ifdef CESTER_REPORT_STREAM
+    {
+        /* A runtime that collects reports, for instance a CI run, returns the stream to write a
+           junitxml report to, and NULL otherwise. */
+        FILE* report_stream = CESTER_REPORT_STREAM();
+        if (report_stream != NULL) {
+            superTestInstance.output_stream = report_stream;
+            superTestInstance.output_format = (char*) "junitxml";
+            superTestInstance.no_color = 1;
+        }
+    }
+#endif
 
     if (superTestInstance.print_version == 1) {
         cester_print_version();
